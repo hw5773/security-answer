@@ -5,7 +5,7 @@ import logging
 import random
 import base64
 from etc import generate_messages
-from Cryptodome.Cipher import AES
+from Crypto.Cipher import AES
 
 BLOCK_SIZE = 16
 

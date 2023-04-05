@@ -2,7 +2,7 @@ import socket
 import argparse
 import logging
 import base64
-from Cryptodome.Cipher import AES
+from Crypto.Cipher import AES
 
 BLOCK_SIZE = 16
 
