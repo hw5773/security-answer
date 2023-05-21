@@ -1,0 +1,1 @@
+{"subject": "root-ca-3", "issuer": "root-ca-3", "serial": 8008124, "not before": "2021-03-01", "not after": "2040-12-31", "public key": "-----BEGIN PUBLIC KEY-----\nMEkwEwYHKoZIzj0CAQYIKoZIzj0DAQEDMgAEIlNlKiST+KiVC4zsGqulQpUQLCc0\naJ8KywV6UJYkdN9GIv4S0Efuf4OGzf2dJXzk\n-----END PUBLIC KEY-----\n", "signature": "u0VBJH8QU13bY9Az4ZVlKPzSUkrPg8oL5tb8DfDFmRIwwU0UUNZ5VyZyGz8AwbB7"}

@@ -1,0 +1,1 @@
+{"subject": "root-ca-2", "issuer": "root-ca-2", "serial": 41132148, "not before": "2021-01-01", "not after": "2030-12-31", "public key": "-----BEGIN PUBLIC KEY-----\nMEkwEwYHKoZIzj0CAQYIKoZIzj0DAQEDMgAEmWQAViNZ1rNiWVh9nQIpvk42puvH\nI5T0lGwsSVn0JLNWDN9ELuWe5DoiZSVlE++4\n-----END PUBLIC KEY-----\n", "signature": "kQe7wHxKjuWREYmapZXXi4A0OVXN6FvXqldaWVtsrpU/tbB3mC9xnpaBWq4vBc67"}

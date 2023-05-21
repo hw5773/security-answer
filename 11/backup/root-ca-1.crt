@@ -1,0 +1,1 @@
+{"subject": "root-ca-1", "issuer": "root-ca-1", "serial": 48210643, "not before": "2020-01-01", "not after": "2050-12-31", "public key": "-----BEGIN PUBLIC KEY-----\nMEkwEwYHKoZIzj0CAQYIKoZIzj0DAQEDMgAE6X6MtppFXgrkag4Ck2ADIEIAkjw4\nY0oiYxf/g6OT+blNrSinHSctuNSfACXT1zWB\n-----END PUBLIC KEY-----\n", "signature": "JPuMBs5RKyn9X5DV8rOYgZUKSLA739h9EL9tMIb0bOAFDkSl0cjFOe4kNfsJQthl"}
