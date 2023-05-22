@@ -6,6 +6,9 @@ import base64
 import os
 import sys
 import json
+import hashlib
+import time
+import datetime
 
 # verify the signature in "signed" (JSON object) based on the public key in "cert" (JSON object)
 def verify_signature(signed, cert):
@@ -52,6 +55,7 @@ def chain_validation(chain, trusted):
         if ret:
             curr = issuer
         else:
+            logging.info("reason: {}".format(reason))
             break
     
     if curr["subject"] == curr["issuer"]:
@@ -88,14 +92,17 @@ def name_validation(url, chain):
 
 def revocation_checking(chain, crl, ocsp):
     curr = int(time.time())
+    curr = datetime.datetime.fromtimestamp(curr)
 
-    # 1. validity checking
+    # 1. checking validity period
     for cert in chain:
-        if curr < cert["not before"]:
+        not_before = datetime.datetime.strptime(cert["not before"], "%Y-%m-%d")
+        not_after = datetime.datetime.strptime(cert["not after"], "%Y-%m-%d")
+        if curr < not_before:
             ret = False
             reason = "invalid certificate (not before) at {}".format(cert["subject"])
             break
-        elif curr > cert["not after"]:
+        elif curr > not_after:
             ret = False
             reason = "invalid certificate (not after) at {}".format(cert["subject"])
             break
@@ -106,9 +113,54 @@ def revocation_checking(chain, crl, ocsp):
     if not ret:
         return ret, reason
     
-    # 2. revocation checking (crl or ocsp)
+    # 2. checking revocation (crl or ocsp)
+    for cert in chain:
+        issuer = cert["issuer"]
+        if issuer in crl:
+            c = crl[issuer]
+            ccert = None
+            for ica in chain:
+                if ica["subject"] == issuer:
+                    ccert = ica
+                    break
+            if ccert:
+                ret, reason = verify_signature(c, ccert)
+                logging.info("ret: {}".format(ret))
+                logging.info("c: {}".format(c))
+                logging.info("ccert: {}".format(ccert))
+                if ret:
+                    revoked = c["revoked certificates"]
+                    for rcert in revoked:
+                        if rcert["serial"] == cert["serial"]:
+                            ret = False
+                            reason = "revoked certificate"
+                            break
+            else:
+                ret = False
+                reason = "invalid chain"
 
-    return False, "not implemented"
+    if not ret:
+        return ret, reason
+
+    if ocsp == "none":
+        return ret, reason
+
+    ccert = None
+    for cert in chain:
+        if cert["subject"] == ocsp["issuer"]:
+            ccert = cert
+            break
+    ret, reason = verify_signature(ocsp, ccert)
+
+    if ret:
+        if ocsp["status"] == "good":
+            ret = True
+            reason = "success"
+        else:
+            ret = False
+            reason = "invalid ocsp status"
+
+    return ret, reason
 
 def validate_certificate(url, chain, trusted, crl, ocsp):
     ret = False
@@ -132,6 +184,13 @@ def load_crls(cdir):
     for ca in clst:
         with open("{}/{}.crl".format(cdir, ca), "r") as f:
             crl[ca] = json.loads(f.read())
+
+    for ca in crl:
+        c = crl[ca]
+        rlst = []
+        for rcert in c["revoked certificates"]:
+            rlst.append(json.loads(rcert))
+        c["revoked certificates"] = rlst
 
     return crl
 
@@ -166,8 +225,13 @@ def run(addr, port, rfile, cdir, tdir):
             received = alice.recv(2048).decode()
             logging.debug("[*] Received: {}".format(received))
             js = json.loads(received)
-            chain = js["chain"]
+            cstr = js["chain"]
+            chain = []
+            for cert in cstr:
+                chain.append(json.loads(cert))
             ocsp = js["ocsp"]
+            if ocsp != "none":
+                ocsp = json.loads(ocsp)
             verified, reason = validate_certificate(url, chain, trusted, crl, ocsp)
             logging.info("[*] Result of Certificate Validation ({}): {} ({})".format(url, verified, reason))
 
