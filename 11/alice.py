@@ -38,6 +38,8 @@ def verify_signature(signed, cert):
             return ret, reason
 
         js = json.dumps(tbv)
+        logging.debug("tbv: {}".format(js))
+        logging.debug("signature: {}".format(signed["signature"]))
         sig = base64.b64decode(signed["signature"].encode())
 
         try:
@@ -55,9 +57,13 @@ def chain_validation(chain, trusted):
         if ret:
             curr = issuer
         else:
-            logging.info("reason: {}".format(reason))
+            logging.debug("reason: {}".format(reason))
             break
     
+    if not ret:
+        reason = "verification failure (chain)"
+        return ret, reason
+
     if curr["subject"] == curr["issuer"]:
         if curr["subject"] in trusted:
             ret = True
@@ -125,15 +131,12 @@ def revocation_checking(chain, crl, ocsp):
                     break
             if ccert:
                 ret, reason = verify_signature(c, ccert)
-                logging.info("ret: {}".format(ret))
-                logging.info("c: {}".format(c))
-                logging.info("ccert: {}".format(ccert))
                 if ret:
                     revoked = c["revoked certificates"]
                     for rcert in revoked:
                         if rcert["serial"] == cert["serial"]:
                             ret = False
-                            reason = "revoked certificate"
+                            reason = "revoked certificate (crl)"
                             break
             else:
                 ret = False
@@ -159,6 +162,8 @@ def revocation_checking(chain, crl, ocsp):
         else:
             ret = False
             reason = "invalid ocsp status"
+    else:
+        reason = "verification failure (ocsp)"
 
     return ret, reason
 
@@ -184,13 +189,6 @@ def load_crls(cdir):
     for ca in clst:
         with open("{}/{}.crl".format(cdir, ca), "r") as f:
             crl[ca] = json.loads(f.read())
-
-    for ca in crl:
-        c = crl[ca]
-        rlst = []
-        for rcert in c["revoked certificates"]:
-            rlst.append(json.loads(rcert))
-        c["revoked certificates"] = rlst
 
     return crl
 

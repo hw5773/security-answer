@@ -24,6 +24,7 @@ def sign(issuer, tbs):
         logging.error("Error in loading the issuer's private key")
         sys.exit(1)
     js = json.dumps(tbs)
+    logging.info("tbs: {}".format(js))
     signature = sk.sign(js.encode(), hashfunc=hashlib.sha256)
     sig = base64.b64encode(signature).decode()
     logging.info("signature: {}".format(sig))
@@ -40,11 +41,12 @@ def run(issuer, rfile):
     num = 0
     with open(rfile, "r") as f:
         for line in f:
-            serial, rdate = line.strip().split(", ")
+            s, rdate = line.strip().split(", ")
+            serial = int(s)
             rcert = {}
             rcert["serial"] = serial
             rcert["revocation date"] = rdate
-            lst.append(json.dumps(rcert))
+            lst.append(rcert)
 
     crl["revoked certificates"] = lst
 
