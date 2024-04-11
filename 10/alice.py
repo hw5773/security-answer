@@ -7,32 +7,25 @@ import sys
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 
-# key * msg
-# -> mlen (4 bytes) || msg || signature (base64 encoded)
-def sign(key, msg):
+def encrypt(key, msg):
     rsa = PKCS1_OAEP.new(key)
-    signature = base64.b64encode(rsa.encrypt(msg.encode())).decode()
-    signed = len(msg).
-    return signed
+    encrypted = base64.b64encode(rsa.encrypt(msg.encode())).decode()
+    return encrypted
 
-# key * (mlen (4 bytes) || msg || signature)
-# -> verified (true / false) * msg
-def verify(private, encrypted):
+def decrypt(private, encrypted):
     rsa = PKCS1_OAEP.new(private)
     decrypted = rsa.decrypt(base64.b64decode(encrypted)).decode()
     return decrypted
 
-def run(addr, port, alice_private, alice_public, bob_public):
+def run(addr, port, key, private, public):
     alice = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     alice.connect((addr, port))
     logging.info("[*] Client is connected to {}:{}".format(addr, port))
-    received = alice.recv(1024).decode()
-    logging.info("[*] Received: {}".format(received))
-    verified, challenge = verify(bob_public, received)
+    challenge = decrypt(private, alice.recv(1024).decode())
     logging.info("[*] Challenge: {}".format(challenge))
-    signed = sign(key, challenge)
-    logging.info("[*] Signed: {}".format(signed))
-    alice.send(signed.encode())
+    encrypted = encrypt(key, challenge)
+    logging.info("[*] Ciphertext: {}".format(encrypted))
+    alice.send(encrypted.encode())
     result = alice.recv(1024).decode()
     if result == "success":
         logging.info("[*] Success!")
