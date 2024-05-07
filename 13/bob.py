@@ -1,3 +1,4 @@
+from ecdsa import SigningKey, VerifyingKey, NIST256p
 import socket
 import threading
 import argparse
@@ -6,35 +7,37 @@ import random
 import base64
 import os
 import sys
+import hashlib
 from etc import generate_messages
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
 
-BLOCK_SIZE = 16
+# ecdca signing key * string
+# -> mlen (2 bytes, big-endian) || ASCII-encoded msg || Base64-encoded signature
+def sign(private, msg):
+    signature = private.sign(msg.encode(), hashfunc=hashlib.sha256)
+    sig = base64.b64encode(signature)
+    ret = int.to_bytes(len(msg), 2, "big")
+    ret += msg.encode()
+    ret += sig
+    return ret
 
-def encrypt(key, msg):
-    rsa = PKCS1_OAEP.new(key)
-    encrypted = base64.b64encode(rsa.encrypt(msg.encode())).decode()
-    return encrypted
+# ecdsa verifying key * (mlen (2 bytes, big-endian) || ASCII-encoded msg || Base64-encoded signature) 
+# -> verified (true / false)
+def verify(public, signature, msg):
+    return verified
 
-def decrypt(private, encrypted):
-    rsa = PKCS1_OAEP.new(private)
-    decrypted = rsa.decrypt(base64.b64decode(encrypted)).decode()
-    return decrypted
-
-def handler(alice, key, private, public):
+def handler(alice, bob_priv, alice_pub):
     challenges = generate_messages()
     rand = int(random.random() * len(challenges))
     challenge = challenges[rand]
-    encrypted = encrypt(key, challenge)
-    alice.send(encrypted.encode())
+    signed = sign(bob_priv, challenge)
+    alice.send(signed.encode())
     logging.info("[*] Challenge: {}".format(challenge))
-    encrypted = alice.recv(1024).decode()
+    logging.info("[*] Signed: {}".format(signed))
+    signed = alice.recv(1024).decode()
     logging.info("[*] Received: {}".format(encrypted))
-    decrypted = decrypt(private, encrypted)
-    logging.info("[*] Plaintext: {}".format(decrypted))
-    if challenge == decrypted and challenge != encrypted:
-        logging.info("[*] Success!")
+    verified, message = verify(private, signed)
+    if verified:
+        logging.info("[*] Success ({})!".format(message))
         result = "success"
     else:
         logging.info("[*] Failure!")
@@ -42,7 +45,7 @@ def handler(alice, key, private, public):
     alice.send(result.encode())
     alice.close()
 
-def run(addr, port, key, private, public):
+def run(addr, port, bob_priv, alice_pub):
     bob = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bob.bind((addr, port))
 
@@ -54,7 +57,7 @@ def run(addr, port, key, private, public):
 
         logging.info("[*] Server accept the connection from {}:{}".format(info[0], info[1]))
 
-        handle = threading.Thread(target=handler, args=(alice, key, private, public))
+        handle = threading.Thread(target=handler, args=(alice, bob_priv, alice_pub))
         handle.start()
 
 def command_line_args():
@@ -86,24 +89,18 @@ def main():
         sys.exit(1)
 
     try:
-        key = RSA.import_key(open(args.key).read())
+        alice_pub = VerifyingKey.from_pem(open(args.key, "rb").read())
     except:
         logging.error("Loading the Alice's public key error. Please check it and try again")
         sys.exit(1)
 
     try:
-        private = RSA.import_key(open(args.private).read())
+        bob_priv = SigningKey.from_pem(open(args.private, "rb").read())
     except:
         logging.error("Loading the Bob's private key error. Please check it and try again")
         sys.exit(1)
 
-    try:
-        public = RSA.import_key(open(args.public).read())
-    except:
-        logging.error("Loading the Bob's public key error. Please check it and try again")
-        sys.exit(1)
-
-    run(args.addr, args.port, key, private, public)
+    run(args.addr, args.port, bob_priv, alice_pub)
 
 if __name__ == "__main__":
     main()

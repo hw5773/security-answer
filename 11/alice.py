@@ -1,38 +1,52 @@
-import socket
-import argparse
-import logging
-import base64
-import os
-import sys
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+import socket, argparse, logging
+import os, sys
+import hmac, hashlib
+from Crypto.Cipher import AES
 
-# key * msg
-# -> mlen (4 bytes) || msg || signature (base64 encoded)
-def sign(key, msg):
-    rsa = PKCS1_OAEP.new(key)
-    signature = base64.b64encode(rsa.encrypt(msg.encode())).decode()
-    signed = len(msg).
-    return signed
+MAC_THEN_ENCRYPT = 0
+ENCRYPT_THEN_MAC = 1
 
-# key * (mlen (4 bytes) || msg || signature)
-# -> verified (true / false) * msg
-def verify(private, encrypted):
-    rsa = PKCS1_OAEP.new(private)
-    decrypted = rsa.decrypt(base64.b64decode(encrypted)).decode()
-    return decrypted
+ENCKEY_LENGTH = 16  # AES-128
+MAC_LENGTH = 32     # HMAC-SHA256
+BLOCK_LENGTH = 16   # AES block size
 
-def run(addr, port, alice_private, alice_public, bob_public):
+# string * string * bytes -> bytes
+def encrypt(key, iv, msg):
+    pad = (BLOCK_LENGTH - len(msg)) % BLOCK_LENGTH
+    msg = msg + pad * chr(pad).encode()
+    aes = AES.new(key.encode(), AES.MODE_CBC, iv.encode())
+    encrypted = aes.encrypt(msg)
+    return encrypted
+
+# string * bytes -> bytes
+def calc_mac(key, msg):
+    h = hmac.new(key.encode(), msg, hashlib.sha256)
+    return h.digest()
+
+# int * string * string * string * string -> bytes
+def ae_encrypt(ae, enckey, mackey, iv, challenge):
+    encrypted = None
+    msg = challenge.encode()
+
+    if ae == MAC_THEN_ENCRYPT:
+        mac = calc_mac(mackey, msg)
+        msg += mac
+        encrypted = encrypt(enckey, iv, msg)
+        return encrypted
+    elif ae == ENCRYPT_THEN_MAC:
+        encrypted = encrypt(enckey, iv, msg)
+        mac = calc_mac(mackey, encrypted)
+        return encrypted + mac
+
+def run(addr, port, ae, enckey, mackey, iv):
     alice = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     alice.connect((addr, port))
     logging.info("[*] Client is connected to {}:{}".format(addr, port))
-    received = alice.recv(1024).decode()
-    logging.info("[*] Received: {}".format(received))
-    verified, challenge = verify(bob_public, received)
+    challenge = alice.recv(1024).decode()
     logging.info("[*] Challenge: {}".format(challenge))
-    signed = sign(key, challenge)
-    logging.info("[*] Signed: {}".format(signed))
-    alice.send(signed.encode())
+    encrypted = ae_encrypt(ae, enckey, mackey, iv, challenge)
+    logging.info("[*] Ciphertext: {}".format(encrypted))
+    alice.send(encrypted)
     result = alice.recv(1024).decode()
     if result == "success":
         logging.info("[*] Success!")
@@ -43,9 +57,10 @@ def command_line_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", "--addr", metavar="<bob's address>", help="Bob's address", type=str, required=True)
     parser.add_argument("-p", "--port", metavar="<bob's port>", help="Bob's port", type=int, required=True)
-    parser.add_argument("-k", "--key", metavar="<bob's public key>", help="Bob's public key", type=str, required=True)
-    parser.add_argument("-x", "--private", metavar="<alice's private key>", help="Alice's private key", type=str, required=True)
-    parser.add_argument("-y", "--public", metavar="<alice's public key>", help="Alice's public key", type=str, required=True)
+    parser.add_argument("-w", "--ae", metavar="<authenticated encryption (0: mac-then-encrypt / 1: encrypt-then-mac)>", help="Authenticated encryption (0: mac-then-encrypt / 1: encrypt-then-mac)", type=int, choices=[0, 1], required=True)
+    parser.add_argument("-x", "--enckey", metavar="<encryption key (AES-128)>", help="Encryption key (AES-128)", type=str, required=True)
+    parser.add_argument("-y", "--mackey", metavar="<mac key (HMAC-SHA256)>", help="MAC key (HMAC-SHA256)", type=str, required=True)
+    parser.add_argument("-z", "--iv", metavar="<initialization vector (16 byte)>", help="Initialization vector (16 byte)", type=str, required=True)
     parser.add_argument("-l", "--log", metavar="<log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)>", help="Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)", type=str, default="INFO")
     args = parser.parse_args()
     return args
@@ -55,37 +70,15 @@ def main():
     log_level = args.log
     logging.basicConfig(level=log_level)
 
-    if not os.path.exists(args.key):
-        logging.error("Bob's public key file does not exist: {}".format(args.key))
+    if len(args.enckey) != ENCKEY_LENGTH:
+        logging.error("Encryption key length error (hint: AES-128): {} bytes".format(len(args.enckey)))
         sys.exit(1)
 
-    if not os.path.exists(args.private):
-        logging.error("Alice's private key file does not exist: {}".format(args.private))
+    if len(args.iv) != BLOCK_LENGTH:
+        logging.error("IV length error (hint: AES)")
         sys.exit(1)
 
-    if not os.path.exists(args.public):
-        logging.error("Alice's public key file does not exist: {}".format(args.public))
-        sys.exit(1)
-
-    try:
-        key = RSA.import_key(open(args.key).read())
-    except:
-        logging.error("Loading the Bob's public key error. Please check it and try again")
-        sys.exit(1)
-
-    try:
-        private = RSA.import_key(open(args.private).read())
-    except:
-        logging.error("Loading the Alice's private key error. Please check it and try again")
-        sys.exit(1)
-
-    try:
-        public = RSA.import_key(open(args.public).read())
-    except:
-        logging.error("Loading the Alice's public key error. Please check it and try again")
-        sys.exit(1)
-
-    run(args.addr, args.port, key, private, public)
+    run(args.addr, args.port, args.ae, args.enckey, args.mackey, args.iv)
     
 if __name__ == "__main__":
     main()
