@@ -9,13 +9,28 @@ from func import encrypt, decrypt
 BUF_SIZE = 1024
 
 def generate_shared_key(p, g, my_priv, my_pub, other_pub):
-    pass
+    return other_pub ** my_priv % p
 
 def generate_dh_keypair(p, g):
-    pass
+    my_priv = random.randint(1, p-1)
+    my_pub = (g ** my_priv) % p
+    return my_priv, my_pub
 
 def is_generator(p, g):
-    pass
+    order = p-1
+    logging.debug("order: {}".format(order))
+
+    tmp = g
+    exp = 1
+    logging.debug("g: {}, exp: {}, tmp: {}".format(g, exp, tmp))
+
+    while tmp != 1:
+        tmp = tmp * g
+        tmp = tmp % p
+        exp += 1
+        logging.debug("g: {}, exp: {}, tmp: {}".format(g, exp, tmp))
+
+    return order == exp
 
 def handler(client):
     params = client.recv(BUF_SIZE)
